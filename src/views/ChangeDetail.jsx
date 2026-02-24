@@ -2,18 +2,22 @@ import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useChangeProcess } from '../hooks/useChangeProcess';
 import ChangeStepper from '../components/ChangeStepper';
+import NotificationSimulator from '../components/NotificationSimulator';
 import { generateFileHash } from '../utils/cryptoHandler';
 
 // Dummy initial data for demo
 const MOCK_DATA = {
     id: 'CHG-2023-001',
     title: 'Migración DB a Azure SQL',
-    status: 'En Evaluación',
+    status: 'Borrador',
     description: 'Se requiere mover la base de datos on-premise a la nube.',
     plan: '1. Backup\n2. Restore\n3. Verify',
     rollback: 'Restore from Backup',
     proposedDate: '2023-11-20',
-    approvers: 'J. Doe, M. Smith',
+    approvers: [
+        { email: 'manager@proredes.cl', status: 'PENDING', notifiedAt: new Date().toISOString() }
+    ],
+    approverList: 'manager@proredes.cl', // Legacy compatibility if needed
     projectId: 'INT-001',
     history: [],
     attachments: [],
@@ -25,10 +29,12 @@ export default function ChangeDetail() {
     const { id } = useParams();
     const {
         change, setChange, updateStatus, error, loading,
-        STATUS, ROLES, userRole, setUserRole, addAttachment
+        STATUS, ROLES, userRole, setUserRole, addAttachment,
+        addApprover, respondAsApprover
     } = useChangeProcess(id === 'new' ? null : MOCK_DATA);
 
     const [comment, setComment] = useState('');
+    const [newApproverEmail, setNewApproverEmail] = useState('');
 
     const handleFileUpload = async (e) => {
         if (e.target.files && e.target.files[0]) {
@@ -138,13 +144,42 @@ export default function ChangeDetail() {
                                     </div>
                                     <div className="mb-3">
                                         <label className="form-label fw-bold">Aprobadores Requeridos</label>
-                                        <input
-                                            className="form-control"
-                                            placeholder="Nombres o correos separados por coma"
-                                            value={change.approvers || ''}
-                                            onChange={e => setChange(prev => ({ ...prev, approvers: e.target.value }))}
-                                            disabled={change.status !== STATUS.DRAFT && change.status !== STATUS.INFO_REQUIRED}
-                                        />
+                                        <div className="input-group mb-2">
+                                            <input
+                                                type="email"
+                                                className="form-control"
+                                                placeholder="correo@empresa.com"
+                                                value={newApproverEmail}
+                                                onChange={e => setNewApproverEmail(e.target.value)}
+                                                disabled={change.status !== STATUS.DRAFT && change.status !== STATUS.INFO_REQUIRED}
+                                            />
+                                            <button
+                                                className="btn btn-outline-primary"
+                                                type="button"
+                                                onClick={() => {
+                                                    addApprover(newApproverEmail);
+                                                    setNewApproverEmail('');
+                                                }}
+                                                disabled={change.status !== STATUS.DRAFT && change.status !== STATUS.INFO_REQUIRED}
+                                            >
+                                                Agregar
+                                            </button>
+                                        </div>
+                                        <ul className="list-group list-group-sm">
+                                            {change.approvers.map(a => (
+                                                <li key={a.email} className="list-group-item d-flex justify-content-between align-items-center">
+                                                    <span>{a.email}</span>
+                                                    <span className={`badge rounded-pill ${a.status === 'APPROVED' ? 'bg-success' :
+                                                        a.status === 'INFO_REQUESTED' ? 'bg-warning text-dark' : 'bg-secondary'
+                                                        }`}>
+                                                        {a.status}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                            {change.approvers.length === 0 && (
+                                                <li className="list-group-item text-muted small">Sin aprobadores asignados.</li>
+                                            )}
+                                        </ul>
                                     </div>
                                     <div className="mb-3">
                                         <label className="form-label fw-bold">Justificación / Descripción</label>
@@ -328,6 +363,11 @@ export default function ChangeDetail() {
                     </div>
                 </div>
             </div>
+            {/* Simulator Panel */}
+            <NotificationSimulator
+                approvers={change.approvers}
+                onRespond={respondAsApprover}
+            />
         </div>
     );
 }

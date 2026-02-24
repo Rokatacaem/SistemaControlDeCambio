@@ -38,7 +38,7 @@ const INITIAL_CHANGE = {
     plan: '',
     rollback: '',
     proposedDate: '',
-    approvers: '',
+    approvers: [], // Array of { email, status, notifiedAt }
     projectId: '',
     pir: {
         result: '',
@@ -66,6 +66,12 @@ export function useChangeProcess(initialData = null) {
 
     const validateTransition = (targetStatus) => {
         if (!canTransition(targetStatus)) return `Transición no permitida: ${change.status} -> ${targetStatus}`;
+
+        // Initial Validation for Evaluation
+        if (targetStatus === STATUS.EVALUATION) {
+            if (!change.title.trim()) return 'El título del cambio es obligatorio.';
+            if (change.approvers.length === 0) return 'Debe especificar al menos un aprobador.';
+        }
 
         // RF-PIR Validation
         if (targetStatus === STATUS.CLOSED) {
@@ -145,16 +151,51 @@ export function useChangeProcess(initialData = null) {
         });
     };
 
+    const addApprover = (email) => {
+        if (!email || !email.includes('@')) return;
+        if (change.approvers.some(a => a.email === email)) return;
+
+        setChange(prev => ({
+            ...prev,
+            approvers: [...prev.approvers, {
+                email,
+                status: 'PENDING',
+                notifiedAt: new Date().toISOString()
+            }]
+        }));
+    };
+
+    const respondAsApprover = (email, response) => {
+        // response: 'APPROVED' or 'INFO_REQUESTED'
+        setChange(prev => ({
+            ...prev,
+            approvers: prev.approvers.map(a =>
+                a.email === email ? { ...a, status: response } : a
+            ),
+            history: [
+                ...prev.history,
+                {
+                    status: response === 'APPROVED' ? 'Aprobación Recibida' : 'Info Solicitada',
+                    comment: `Respuesta de ${email}: ${response}`,
+                    timestamp: new Date().toISOString(),
+                    user: email
+                }
+            ]
+        }));
+    };
+
     return {
         change,
-        setChange, // For form updates
+        setChange,
         loading,
         error,
         userRole,
-        setUserRole, // For demo purposes to switch roles
+        setUserRole,
         STATUS,
         ROLES,
         updateStatus,
-        addAttachment
+        addAttachment,
+        addApprover,
+        respondAsApprover
     };
 }
